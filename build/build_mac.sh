@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Ir a la raíz del proyecto
 cd "$(dirname "$0")/.."
 
 if [ ! -d ".venv" ]; then
@@ -16,11 +15,19 @@ echo "Compilando SebaRockerPlayer (.app) para macOS..."
     --windowed \
     --workpath build_out \
     --name "SebaRockerPlayer" \
-    --collect-binaries sounddevice \
-    --collect-binaries _sounddevice_data \
-    --collect-binaries soundfile \
-    --collect-binaries _soundfile_data \
+    --collect-all sounddevice \
+    --collect-all _sounddevice_data \
+    --collect-all soundfile \
+    --collect-all _soundfile_data \
     --collect-all miniaudio \
+    --exclude-module PySide6.QtWebEngineCore \
+    --exclude-module PySide6.QtWebEngineWidgets \
+    --exclude-module PySide6.QtWebEngineQuick \
+    --exclude-module PySide6.QtPdf \
+    --exclude-module PySide6.QtPdfWidgets \
+    --exclude-module PySide6.QtQml \
+    --exclude-module PySide6.QtQuick \
+    --exclude-module PySide6.QtQuickWidgets \
     main.py
 
 echo "✅ Compilación exitosa: dist/SebaRockerPlayer.app"

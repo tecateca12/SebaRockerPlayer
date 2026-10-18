@@ -1,0 +1,154 @@
+name: Build and Release SebaRockerPlayer (macOS & Windows)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release tag (e.g. v0.1)'
+        required: true
+        default: 'v0.1'
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    name: Build macOS (.app)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build SebaRockerPlayer.app with PyInstaller
+        run: |
+          pyinstaller \
+            --noconfirm \
+            --clean \
+            --windowed \
+            --workpath build_out \
+            --name "SebaRockerPlayer" \
+            --collect-all sounddevice \
+            --collect-all _sounddevice_data \
+            --collect-all soundfile \
+            --collect-all _soundfile_data \
+            --collect-all miniaudio \
+            --exclude-module PySide6.QtWebEngineCore \
+            --exclude-module PySide6.QtWebEngineWidgets \
+            --exclude-module PySide6.QtWebEngineQuick \
+            --exclude-module PySide6.QtPdf \
+            --exclude-module PySide6.QtPdfWidgets \
+            --exclude-module PySide6.QtQml \
+            --exclude-module PySide6.QtQuick \
+            --exclude-module PySide6.QtQuickWidgets \
+            main.py
+
+      - name: Package macOS .app into ZIP
+        run: |
+          cd dist
+          ditto -c -k --sequesterRsrc --keepParent "SebaRockerPlayer.app" "SebaRockerPlayer-macOS.zip"
+
+      - name: Upload macOS Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-artifact
+          path: dist/SebaRockerPlayer-macOS.zip
+
+  build-windows:
+    name: Build Windows (.exe)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build SebaRockerPlayer.exe with PyInstaller
+        run: |
+          pyinstaller ^
+            --noconfirm ^
+            --clean ^
+            --windowed ^
+            --onefile ^
+            --workpath build_out ^
+            --name "SebaRockerPlayer-Windows" ^
+            --collect-all sounddevice ^
+            --collect-all _sounddevice_data ^
+            --collect-all soundfile ^
+            --collect-all _soundfile_data ^
+            --collect-all miniaudio ^
+            --exclude-module PySide6.QtWebEngineCore ^
+            --exclude-module PySide6.QtWebEngineWidgets ^
+            --exclude-module PySide6.QtWebEngineQuick ^
+            --exclude-module PySide6.QtPdf ^
+            --exclude-module PySide6.QtPdfWidgets ^
+            --exclude-module PySide6.QtQml ^
+            --exclude-module PySide6.QtQuick ^
+            --exclude-module PySide6.QtQuickWidgets ^
+            main.py
+
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-artifact
+          path: dist/SebaRockerPlayer-Windows.exe
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download macOS Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-artifact
+          path: release_assets
+
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-artifact
+          path: release_assets
+
+      - name: Create GitHub Release & Upload Binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "SebaRockerPlayer ${{ github.ref_name }}"
+          body: |
+            ## SebaRockerPlayer ${{ github.ref_name }} 🎸🥁
+            Reproductor dual sincronizado (**Backing Track + Click**) con precisión **Sample-Accurate** (cero desfasaje).
+
+            ### Descargas
+            - 🍎 **macOS:** `SebaRockerPlayer-macOS.zip` (Descomprimir y abrir `SebaRockerPlayer.app`. En el primer inicio hacer *Clic derecho -> Abrir* si macOS pide confirmación).
+            - 🪟 **Windows:** `SebaRockerPlayer-Windows.exe` (Ejecutable portable directo, no requiere instalar Python).
+
+            📖 Ver [Manual de Uso Básico](./MANUAL_DE_USO.md).
+          files: |
+            release_assets/SebaRockerPlayer-macOS.zip
+            release_assets/SebaRockerPlayer-Windows.exe
