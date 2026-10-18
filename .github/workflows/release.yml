@@ -35,26 +35,7 @@ jobs:
 
       - name: Build SebaRockerPlayer.app with PyInstaller
         run: |
-          pyinstaller \
-            --noconfirm \
-            --clean \
-            --windowed \
-            --workpath build_out \
-            --name "SebaRockerPlayer" \
-            --collect-all sounddevice \
-            --collect-all _sounddevice_data \
-            --collect-all soundfile \
-            --collect-all _soundfile_data \
-            --collect-all miniaudio \
-            --exclude-module PySide6.QtWebEngineCore \
-            --exclude-module PySide6.QtWebEngineWidgets \
-            --exclude-module PySide6.QtWebEngineQuick \
-            --exclude-module PySide6.QtPdf \
-            --exclude-module PySide6.QtPdfWidgets \
-            --exclude-module PySide6.QtQml \
-            --exclude-module PySide6.QtQuick \
-            --exclude-module PySide6.QtQuickWidgets \
-            main.py
+          pyinstaller --noconfirm --clean --windowed --workpath build_out --name "SebaRockerPlayer" --collect-all sounddevice --collect-all _sounddevice_data --collect-all soundfile --collect-all _soundfile_data --collect-all miniaudio --exclude-module PySide6.QtWebEngineCore --exclude-module PySide6.QtWebEngineWidgets --exclude-module PySide6.QtWebEngineQuick --exclude-module PySide6.QtPdf --exclude-module PySide6.QtPdfWidgets --exclude-module PySide6.QtQml --exclude-module PySide6.QtQuick --exclude-module PySide6.QtQuickWidgets main.py
 
       - name: Package macOS .app into ZIP
         run: |
@@ -87,27 +68,7 @@ jobs:
 
       - name: Build SebaRockerPlayer.exe with PyInstaller
         run: |
-          pyinstaller ^
-            --noconfirm ^
-            --clean ^
-            --windowed ^
-            --onefile ^
-            --workpath build_out ^
-            --name "SebaRockerPlayer-Windows" ^
-            --collect-all sounddevice ^
-            --collect-all _sounddevice_data ^
-            --collect-all soundfile ^
-            --collect-all _soundfile_data ^
-            --collect-all miniaudio ^
-            --exclude-module PySide6.QtWebEngineCore ^
-            --exclude-module PySide6.QtWebEngineWidgets ^
-            --exclude-module PySide6.QtWebEngineQuick ^
-            --exclude-module PySide6.QtPdf ^
-            --exclude-module PySide6.QtPdfWidgets ^
-            --exclude-module PySide6.QtQml ^
-            --exclude-module PySide6.QtQuick ^
-            --exclude-module PySide6.QtQuickWidgets ^
-            main.py
+          pyinstaller --noconfirm --clean --windowed --onefile --workpath build_out --name "SebaRockerPlayer-Windows" --collect-all sounddevice --collect-all _sounddevice_data --collect-all soundfile --collect-all _soundfile_data --collect-all miniaudio --exclude-module PySide6.QtWebEngineCore --exclude-module PySide6.QtWebEngineWidgets --exclude-module PySide6.QtWebEngineQuick --exclude-module PySide6.QtPdf --exclude-module PySide6.QtPdfWidgets --exclude-module PySide6.QtQml --exclude-module PySide6.QtQuick --exclude-module PySide6.QtQuickWidgets main.py
 
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
@@ -144,7 +105,7 @@ jobs:
             ## SebaRockerPlayer ${{ github.ref_name }} 🎸🥁
             Reproductor dual sincronizado (**Backing Track + Click**) con precisión **Sample-Accurate** (cero desfasaje).
 
-            ### Descargas
+            ### Descargas Directas
             - 🍎 **macOS:** `SebaRockerPlayer-macOS.zip` (Descomprimir y abrir `SebaRockerPlayer.app`. En el primer inicio hacer *Clic derecho -> Abrir* si macOS pide confirmación).
             - 🪟 **Windows:** `SebaRockerPlayer-Windows.exe` (Ejecutable portable directo, no requiere instalar Python).
 
