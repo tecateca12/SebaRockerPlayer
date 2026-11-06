@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>SebaRockerPlayer v0.2</title>
+<style>
+  :root {
+    --bg-main: #0d1117;
+    --bg-panel: #161b22;
+    --bg-dark: #090d12;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --blue: #58a6ff;
+    --blue-dark: #1f6feb;
+    --green: #3fb950;
+    --green-dark: #238636;
+    --orange: #f78166;
+    --amber: #d29922;
+    --red: #da3633;
+    --lyric-size: 22px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+  body {
+    margin: 0; padding: 10px;
+    background: var(--bg-main); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    height: 100vh; display: flex; flex-direction: column; gap: 8px; overflow: hidden;
+  }
+  /* Deck Header */
+  .deck {
+    background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 14px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .deck-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .song-title { font-size: 18px; font-weight: 800; color: #f0f6fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .song-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .clock-box { display: flex; align-items: center; gap: 8px; }
+  .clock {
+    font-family: monospace; font-size: 22px; font-weight: 800; color: var(--green);
+    background: var(--bg-main); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px;
+  }
+  .badge {
+    font-size: 10px; font-weight: 700; padding: 3px 6px; border-radius: 4px; background: var(--bg-main);
+  }
+  .badge-sync { color: var(--green); border: 1px solid var(--green-dark); }
+  .badge-sr { color: var(--blue); border: 1px solid var(--blue-dark); }
+
+  /* Seek Bar */
+  input[type=range].seek-slider {
+    width: 100%; height: 8px; accent-color: var(--blue); cursor: pointer; margin: 2px 0;
+  }
+
+  /* Transport Row */
+  .transport { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  button {
+    background: #21262d; color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 7px 12px; font-size: 13px; font-weight: 700; cursor: pointer;
+  }
+  button:active { transform: scale(0.97); }
+  .btn-play { background: var(--green-dark); color: #fff; min-width: 96px; }
+  .btn-play.playing { background: var(--blue-dark); }
+  .btn-mode.continuous { background: var(--blue-dark); color: #fff; }
+  .btn-mode.live { background: #9e6a03; color: #fff; }
+
+  /* Mixer Row */
+  .mixer {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  }
+  .strip {
+    background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 10px; display: flex; flex-direction: column; gap: 4px;
+  }
+  .strip-top { display: flex; align-items: center; gap: 5px; }
+  .strip-title { font-size: 11px; font-weight: 800; flex: 1; }
+  .strip-val { font-family: monospace; font-size: 12px; font-weight: 700; width: 38px; text-align: right; }
+  .mini-btn { padding: 3px 7px; font-size: 11px; border-radius: 4px; }
+  .mini-btn.muted { background: var(--red); color: #fff; border-color: #f85149; }
+  .mini-btn.solo { background: var(--amber); color: #0d1117; border-color: #e3b341; }
+  .strip input[type=range] { width: 100%; margin: 2px 0; }
+
+  /* Main Split View (Playlist + Teleprompter) */
+  .split-area {
+    flex: 1; display: grid; grid-template-columns: 42% 58%; gap: 8px; min-height: 0;
+  }
+  .panel {
+    background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 0;
+  }
+  .panel-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .panel-title { font-size: 12px; font-weight: 800; letter-spacing: 0.5px; }
+  .search-input {
+    background: var(--bg-main); color: var(--text); border: 1px solid var(--border);
+    border-radius: 5px; padding: 4px 8px; font-size: 12px; margin-left: auto; width: 150px;
+  }
+
+  /* Playlist Table */
+  .playlist-scroll {
+    flex: 1; overflow-y: auto; background: var(--bg-main); border: 1px solid var(--border); border-radius: 6px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    position: sticky; top: 0; background: #161b22; color: var(--muted);
+    font-size: 11px; text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border);
+  }
+  td { padding: 8px; border-bottom: 1px solid #161b22; cursor: pointer; }
+  tr:nth-child(even) { background: #121820; }
+  tr.active { background: #1f3a60; font-weight: 700; color: var(--blue); }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 5px; }
+
+  /* LivePrompter Teleprompter Viewport */
+  .prompter-viewport {
+    flex: 1; position: relative; overflow-y: auto; background: var(--bg-dark);
+    border: 1px solid var(--border); border-radius: 6px; scroll-behavior: auto;
+  }
+  .focus-guide {
+    position: sticky; top: 32%; left: 0; right: 0; height: 0; z-index: 5; pointer-events: none;
+    border-bottom: 1px dashed rgba(88, 166, 255, 0.45);
+  }
+  .focus-guide::before {
+    content: "▶"; position: absolute; left: 6px; top: -10px; color: var(--blue); font-size: 13px;
+  }
+  .lyrics-content {
+    padding: 18vh 20px 55vh 32px; display: flex; flex-direction: column; gap: 4px;
+  }
+  .lyric-line {
+    font-size: var(--lyric-size); line-height: 1.42; color: #c9d1d9;
+    padding: 3px 10px; border-radius: 4px; transition: color 0.12s;
+  }
+  .lyric-line.chorus {
+    border-left: 4px solid var(--orange);
+    background: rgba(247, 129, 102, 0.10);
+    color: var(--orange); font-weight: 700;
+  }
+  .lyric-line.comment {
+    color: var(--amber); font-size: calc(var(--lyric-size) * 0.82); font-weight: 700;
+  }
+  .lyric-line.active-line {
+    color: #ffffff; font-weight: 800; background: rgba(88, 166, 255, 0.14);
+  }
+  .lyric-line.chorus.active-line {
+    color: #ffa657; background: rgba(247, 129, 102, 0.22);
+  }
+  .empty-lyrics {
+    height: 100%; display: flex; align-items: center; justify-content: center;
+    text-align: center; color: #6e7681; font-size: 14px; font-weight: 600; padding: 20px;
+  }
+
+  /* Stage Fullscreen Mode */
+  body.stage-mode .mixer,
+  body.stage-mode #playlistPanel {
+    display: none !important;
+  }
+  body.stage-mode .split-area {
+    grid-template-columns: 1fr !important;
+  }
+  body.stage-mode #btnStage {
+    background: var(--red); color: #fff; border-color: #f85149;
+  }
+
+  /* Responsive Portrait Fallback */
+  @media (max-width: 760px) {
+    .mixer { grid-template-columns: 1fr; }
+    .split-area { grid-template-columns: 1fr; grid-template-rows: 42% 58%; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- 1. TOP DECK & TRANSPORT -->
+  <div class="deck">
+    <div class="deck-top">
+      <div style="min-width:0; flex:1;">
+        <div class="song-title" id="songTitle">SebaRockerPlayer — Cargá una carpeta o tema</div>
+        <div class="song-meta" id="songMeta">Auto-empareja: '&lt;Tema&gt; D.wav' + '&lt;Tema&gt; Clic.mp3' + '&lt;Tema&gt; L.txt'</div>
+      </div>
+      <div class="clock-box">
+        <span class="badge badge-sync" id="syncBadge">🔒 SYNC PERFECTO</span>
+        <span class="badge badge-sr" id="srBadge">-- kHz</span>
+        <div class="clock" id="timeClock">00:00 / 00:00</div>
+      </div>
+    </div>
+
+    <input type="range" class="seek-slider" id="seekSlider" min="0" max="10000" value="0" />
+
+    <div class="transport">
+      <button onclick="prevTrack()">⏮ Anterior</button>
+      <button class="btn-play" id="btnPlay" onclick="togglePlayPause()">▶ Play</button>
+      <button onclick="stopPlayback()">⏹ Stop</button>
+      <button onclick="nextTrack()">⏭ Siguiente</button>
+      <button class="btn-mode continuous" id="btnMode" onclick="toggleMode()">🔄 Modo: Continuo (Winamp)</button>
+    </div>
+  </div>
+
+  <!-- 2. MIXER (Master 100%, Backing 100%, Click 60%) -->
+  <div class="mixer">
+    <div class="strip">
+      <div class="strip-top">
+        <span class="strip-title" style="color:var(--green);">MASTER (AMBAS)</span>
+        <span class="strip-val" id="valMaster">100%</span>
+        <button class="mini-btn" onclick="setStripVol('master', 100)">100%</button>
+        <button class="mini-btn" id="muteMaster" onclick="toggleMute('master')">M</button>
+      </div>
+      <input type="range" id="sliderMaster" min="0" max="100" value="100" oninput="onSlider('master', this.value)" />
+    </div>
+
+    <div class="strip">
+      <div class="strip-top">
+        <span class="strip-title" style="color:var(--blue);">BACKING TRACK</span>
+        <span class="strip-val" id="valBacking">100%</span>
+        <button class="mini-btn" onclick="setStripVol('backing', 100)">100%</button>
+        <button class="mini-btn" id="muteBacking" onclick="toggleMute('backing')">M</button>
+        <button class="mini-btn" id="soloBacking" onclick="toggleSolo('backing')">S</button>
+      </div>
+      <input type="range" id="sliderBacking" min="0" max="100" value="100" oninput="onSlider('backing', this.value)" />
+    </div>
+
+    <div class="strip">
+      <div class="strip-top">
+        <span class="strip-title" style="color:var(--orange);">CLICK TRACK</span>
+        <span class="strip-val" id="valClick">60%</span>
+        <button class="mini-btn" onclick="setStripVol('click', 60)">60%</button>
+        <button class="mini-btn" id="muteClick" onclick="toggleMute('click')">M</button>
+        <button class="mini-btn" id="soloClick" onclick="toggleSolo('click')">S</button>
+      </div>
+      <input type="range" id="sliderClick" min="0" max="100" value="60" oninput="onSlider('click', this.value)" />
+    </div>
+  </div>
+
+  <!-- 3. SPLIT AREA: PLAYLIST + LIVEPROMPTER TELEPROMPTER -->
+  <div class="split-area">
+    <!-- Left: Playlist -->
+    <div class="panel" id="playlistPanel">
+      <div class="panel-header">
+        <span class="panel-title" style="color:var(--blue);">PLAYLIST</span>
+        <span style="font-size:11px; color:var(--muted);" id="playlistCount">(0 temas)</span>
+        <input type="text" class="search-input" id="searchInput" placeholder="🔍 Filtrar..." oninput="renderPlaylist()" />
+      </div>
+
+      <div class="playlist-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:34px;">#</th>
+              <th>Tema</th>
+              <th style="width:62px; text-align:center;">Click</th>
+              <th style="width:58px; text-align:center;">Letra</th>
+              <th style="width:52px; text-align:center;">Vol</th>
+            </tr>
+          </thead>
+          <tbody id="playlistBody"></tbody>
+        </table>
+      </div>
+
+      <div class="toolbar">
+        <button onclick="openFilesPicker()">➕ Tema(s)</button>
+        <button onclick="openFolderPicker()">📁 Carpeta</button>
+        <button onclick="moveSelected(-1)">⬆</button>
+        <button onclick="moveSelected(1)">⬇</button>
+        <button onclick="removeSelected()">🗑</button>
+        <button onclick="clearPlaylist()">🧹 Limpiar</button>
+      </div>
+      <input type="file" id="hiddenFilesInput" multiple accept=".wav,.mp3,.flac,.ogg,.m4a,.aif,.aiff,.txt" style="display:none" onchange="handleBrowserFiles(this.files)" />
+      <input type="file" id="hiddenFolderInput" webkitdirectory directory multiple style="display:none" onchange="handleBrowserFiles(this.files)" />
+    </div>
+
+    <!-- Right: LivePrompter Teleprompter -->
+    <div class="panel" id="lyricsPanel">
+      <div class="panel-header">
+        <span class="panel-title" style="color:var(--orange);">📝 TELEPROMPTER</span>
+        <span class="badge" style="color:var(--muted); border:1px solid var(--border);" id="lyricsMetaBadge">Sin archivo L.txt</span>
+        <div style="margin-left:auto; display:flex; gap:5px;">
+          <button class="mini-btn" onclick="changeFontSize(-2)">A-</button>
+          <button class="mini-btn" onclick="changeFontSize(2)">A+</button>
+          <button class="mini-btn" id="btnStage" onclick="toggleStageMode()">⛶ Modo Escenario</button>
+        </div>
+      </div>
+
+      <div class="prompter-viewport" id="prompterViewport">
+        <div class="focus-guide"></div>
+        <div id="lyricsContainer" class="empty-lyrics">
+          📝 Sin letra cargada para este tema<br/>
+          (Si existe '&lt;Tema&gt; L.txt' en la carpeta, se cargará y scrolleará automáticamente)
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* =========================================================================
+   Sample-Accurate Dual Audio + LivePrompter Engine for SebaRockerPlayer
+   ========================================================================= */
+const AUDIO_EXTS = new Set(['.wav', '.mp3', '.flac', '.ogg', '.m4a', '.aif', '.aiff']);
+const LYRIC_EXTS = new Set(['.txt', '.cho', '.crd']);
+
+let playlist = [];
+let currentIndex = -1;
+let continuousMode = true;
+let lyricFontSize = 22;
+
+// Volume & Mute/Solo State (Click defaults to 60%)
+let state = {
+  masterVol: 1.0,
+  backingVol: 1.0,
+  clickVol: 0.60,
+  masterMuted: false,
+  backingMuted: false,
+  clickMuted: false,
+  backingSolo: false,
+  clickSolo: false
+};
+
+// Web Audio API Context & Sample-Accurate Buffers
+let audioCtx = null;
+let backingBuffer = null;
+let clickBuffer = null;
+let backingSource = null;
+let clickSource = null;
+let backingGainNode = null;
+let clickGainNode = null;
+
+let isPlaying = false;
+let startCtxTime = 0;
+let pauseOffsetSec = 0;
+let trackDurationSec = 0;
+let userSeeking = false;
+let currentLyrics = null; // Parsed LivePrompter object
+
+// Per-song click volume memory in localStorage
+let volumeMemory = {};
+try {
+  volumeMemory = JSON.parse(localStorage.getItem('seba_vol_memory') || '{}');
+} catch (e) { volumeMemory = {}; }
+
+function saveVolumeMemory() {
+  try { localStorage.setItem('seba_vol_memory', JSON.stringify(volumeMemory)); } catch (e) {}
+}
+
+function fmtTime(sec) {
+  sec = Math.max(0, Math.floor(sec || 0));
+  const m = String(Math.floor(sec / 60)).padStart(2, '0');
+  const s = String(sec % 60).padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+/* -------------------------------------------------------------------------
+   Auto-Pairing Scanner ('* D.wav' + '* Clic.mp3' + '* L.txt')
+   ------------------------------------------------------------------------- */
+function classifyFileName(fileName) {
+  const dot = fileName.lastIndexOf('.');
+  if (dot <= 0) return null;
+  const stem = fileName.slice(0, dot).normalize('NFC').trim();
+  const ext = fileName.slice(dot).toLowerCase();
+
+  if (LYRIC_EXTS.has(ext)) {
+    const mL = stem.match(/^(.+?)[\s_-]+l$/i);
+    if (mL) return { base: mL[1].trim(), role: 'lyrics_l', ext };
+    return { base: stem, role: 'lyrics_generic', ext };
+  }
+  if (AUDIO_EXTS.has(ext)) {
+    const mC = stem.match(/^(.+?)[\s_-]+clic(?:k)?$/i);
+    if (mC) return { base: mC[1].trim(), role: 'click', ext };
+    const mB = stem.match(/^(.+?)[\s_-]+d$/i);
+    if (mB) return { base: mB[1].trim(), role: 'backing_d', ext };
+    return { base: stem, role: 'generic', ext };
+  }
+  return null;
+}
+
+function normKey(str) {
+  return str.normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function pairFileEntries(entries) {
+  // entries: [{ name, folder, getArrayBuffer, getText, id }]
+  const groups = new Map();
+  const sorted = [...entries].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+
+  for (const entry of sorted) {
+    const info = classifyFileName(entry.name);
+    if (!info) continue;
+    const key = normKey(entry.folder + '/' + info.base);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        idKey: key,
+        title: info.base,
+        folder: entry.folder || '',
+        backing: null,
+        click: null,
+        generic: null,
+        lyricsL: null,
+        lyricsGen: null
+      });
+    }
+    const g = groups.get(key);
+    if (info.role === 'backing_d' && !g.backing) { g.backing = entry; g.title = info.base; }
+    else if (info.role === 'click' && !g.click) g.click = entry;
+    else if (info.role === 'generic' && !g.generic) g.generic = entry;
+    else if (info.role === 'lyrics_l' && !g.lyricsL) g.lyricsL = entry;
+    else if (info.role === 'lyrics_generic' && !g.lyricsGen) g.lyricsGen = entry;
+  }
+
+  const existingKeys = new Set(playlist.map(t => t.idKey));
+  const wasEmpty = playlist.length === 0;
+
+  for (const g of groups.values()) {
+    const backing = g.backing || g.generic;
+    const click = g.click;
+    const lyrics = g.lyricsL || g.lyricsGen;
+    if (!backing && !click) continue;
+    if (existingKeys.has(g.idKey)) continue;
+
+    const savedVol = volumeMemory[g.idKey] !== undefined ? volumeMemory[g.idKey] : 0.60;
+    playlist.push({
+      idKey: g.idKey,
+      title: g.title,
+      folder: g.folder,
+      backingEntry: backing,
+      clickEntry: click,
+      lyricsEntry: lyrics,
+      clickVolume: savedVol
+    });
+    existingKeys.add(g.idKey);
+  }
+
+  renderPlaylist();
+  if (wasEmpty && playlist.length > 0) {
+    selectAndLoadTrack(0, false);
+  }
+}
+
+/* -------------------------------------------------------------------------
+   File / Folder Pickers (Android Native SAF + Browser Fallback)
+   ------------------------------------------------------------------------- */
+function openFilesPicker() {
+  const inp = document.getElementById('hiddenFilesInput');
+  inp.value = '';
+  inp.click();
+}
+
+function openFolderPicker() {
+  if (window.AndroidNative && typeof window.AndroidNative.pickFolder === 'function') {
+    window.AndroidNative.pickFolder();
+  } else {
+    const inp = document.getElementById('hiddenFolderInput');
+    inp.value = '';
+    inp.click();
+  }
+}
+
+function handleBrowserFiles(fileList) {
+  if (!fileList || fileList.length === 0) return;
+  const entries = [];
+  for (const f of fileList) {
+    const rel = f.webkitRelativePath || '';
+    const parts = rel.split('/');
+    const folder = parts.length > 1 ? parts[parts.length - 2] : 'Archivos';
+    entries.push({
+      name: f.name,
+      folder,
+      getArrayBuffer: () => f.arrayBuffer(),
+      getText: () => f.text()
+    });
+  }
+  pairFileEntries(entries);
+}
+
+window.onAndroidFilesScanned = function(items) {
+  if (!items || !items.length) return;
+  const entries = items.map(it => {
+    const proxyUrl = 'https://local.sebarocker/content?uri=' + encodeURIComponent(it.uri);
+    return {
+      name: it.name,
+      folder: it.folder || 'Carpeta',
+      getArrayBuffer: () => fetch(proxyUrl).then(r => r.arrayBuffer()),
+      getText: () => fetch(proxyUrl).then(r => r.text())
+    };
+  });
+  pairFileEntries(entries);
+};
+
+/* -------------------------------------------------------------------------
+   LivePrompter (.txt) Parser & Scroll Calculator
+   ------------------------------------------------------------------------- */
+function parseTimeVal(raw) {
+  const s = (raw || '').trim();
+  if (!s) return null;
+  if (s.includes(':')) {
+    const p = s.split(':').map(Number);
+    if (p.some(isNaN)) return null;
+    if (p.length === 2) return Math.max(0, p[0] * 60 + p[1]);
+    if (p.length === 3) return Math.max(0, p[0] * 3600 + p[1] * 60 + p[2]);
+  }
+  const n = Number(s);
+  return isNaN(n) ? null : Math.max(0, n);
+}
+
+function parseLivePrompterText(rawText) {
+  const parsed = { title: null, artist: null, durationSeconds: null, lines: [] };
+  let inChorus = false;
+  let pendingAnchor = null;
+  let pendingPause = 0;
+
+  for (const rawLine of rawText.split(/\r?\n/)) {
+    const mTag = rawLine.match(/^\s*\{([a-zA-Z0-9_]+)(?::(.*))?\}\s*$/);
+    if (mTag) {
+      const tag = mTag[1].toLowerCase();
+      const val = (mTag[2] || '').trim();
+      if (tag === 'title' || tag === 't') parsed.title = val;
+      else if (tag === 'artist' || tag === 'subtitle' || tag === 'st') parsed.artist = val;
+      else if (tag === 'duration') {
+        const d = parseTimeVal(val);
+        if (d && d > 0) parsed.durationSeconds = d;
+      } else if (tag === 'soc' || tag === 'start_of_chorus') inChorus = true;
+      else if (tag === 'eoc' || tag === 'end_of_chorus') inChorus = false;
+      else if (tag === 'comment' || tag === 'c') {
+        if (val) {
+          parsed.lines.push({ text: val, isChorus: inChorus, isComment: true, anchor: pendingAnchor, pause: pendingPause });
+          pendingAnchor = null; pendingPause = 0;
+        }
+      } else if (tag === 'd_time') {
+        const t = parseTimeVal(val);
+        if (t !== null) pendingAnchor = t;
+      } else if (tag === 'pause') {
+        const p = parseTimeVal(val);
+        if (p !== null) pendingPause += p;
+      }
+      continue;
+    }
+
+    // Strip any chord brackets like [Am] [G]
+    const clean = rawLine.replace(/\[[A-G][^\]]*\]/g, '').replace(/\s+$/, '');
+    if (!clean.trim()) {
+      if (parsed.lines.length === 0 || !parsed.lines[parsed.lines.length - 1].text.trim()) continue;
+    }
+    parsed.lines.push({ text: clean, isChorus: inChorus, isComment: false, anchor: pendingAnchor, pause: pendingPause });
+    pendingAnchor = null; pendingPause = 0;
+  }
+
+  while (parsed.lines.length && !parsed.lines[parsed.lines.length - 1].text.trim()) {
+    parsed.lines.pop();
+  }
+  return parsed;
+}
+
+function computeScrollRatio(lyrics, elapsedSec, audioDurSec) {
+  if (!lyrics || !lyrics.lines.length) return 0;
+  const totalDur = (lyrics.durationSeconds && lyrics.durationSeconds > 0)
+    ? lyrics.durationSeconds
+    : Math.max(1, audioDurSec || 1);
+
+  if (elapsedSec <= 0) return 0;
+  if (elapsedSec >= totalDur) return 1;
+
+  const n = lyrics.lines.length;
+  if (n <= 1) return Math.min(1, elapsedSec / totalDur);
+
+  const hasCustom = lyrics.lines.some(l => l.anchor !== null || l.pause > 0);
+  if (!hasCustom) return Math.min(1, Math.max(0, elapsedSec / totalDur));
+
+  const kf = [[0, 0]];
+  let lastT = 0, lastP = 0;
+  lyrics.lines.forEach((ln, idx) => {
+    const pos = idx / (n - 1);
+    if (ln.anchor !== null && ln.anchor >= lastT) {
+      lastT = ln.anchor; lastP = pos;
+      kf.push([lastT, lastP]);
+    }
+    if (ln.pause > 0) {
+      if (ln.anchor === null) {
+        const remT = Math.max(0, totalDur - lastT);
+        const remP = Math.max(0.0001, 1 - lastP);
+        lastT = lastT + remT * ((pos - lastP) / remP);
+        lastP = pos;
+        kf.push([lastT, lastP]);
+      }
+      lastT += ln.pause;
+      kf.push([lastT, lastP]);
+    }
+  });
+  kf.push([Math.max(lastT + 0.1, totalDur), 1]);
+
+  for (let i = 0; i < kf.length - 1; i++) {
+    const [t0, p0] = kf[i];
+    const [t1, p1] = kf[i + 1];
+    if (elapsedSec >= t0 && elapsedSec <= t1) {
+      if (t1 <= t0) return p1;
+      return p0 + ((elapsedSec - t0) / (t1 - t0)) * (p1 - p0);
+    }
+  }
+  return 1;
+}
+
+function renderLyricsDOM(lyrics, audioDur) {
+  const container = document.getElementById('lyricsContainer');
+  const badge = document.getElementById('lyricsMetaBadge');
+
+  if (!lyrics || !lyrics.lines.length) {
+    container.className = 'empty-lyrics';
+    container.innerHTML = "📝 Sin letra cargada para este tema<br/>(Si existe '&lt;Tema&gt; L.txt' en la carpeta, se cargará y scrolleará automáticamente)";
+    badge.textContent = '⚠️ Sin archivo L.txt';
+    return;
+  }
+
+  const meta = [];
+  if (lyrics.artist) meta.push('🎤 ' + lyrics.artist);
+  if (lyrics.durationSeconds) meta.push('⏱ Scroll: ' + fmtTime(lyrics.durationSeconds) + ' (tag duration)');
+  else if (audioDur > 0) meta.push('⏱ Scroll: ' + fmtTime(audioDur) + ' (audio)');
+  badge.textContent = meta.join(' · ') || '📝 Letra activa';
+
+  container.className = 'lyrics-content';
+  container.innerHTML = '';
+  lyrics.lines.forEach((ln, idx) => {
+    const div = document.createElement('div');
+    div.className = 'lyric-line' + (ln.isChorus ? ' chorus' : '') + (ln.isComment ? ' comment' : '');
+    div.id = 'lyricLine_' + idx;
+    div.textContent = ln.isComment ? ('▸ ' + ln.text) : (ln.text || '\u00A0');
+    container.appendChild(div);
+  });
+}
+
+function updateLyricsScroll(elapsedSec) {
+  if (!currentLyrics || !currentLyrics.lines.length) return;
+  const ratio = computeScrollRatio(currentLyrics, elapsedSec, trackDurationSec);
+  const n = currentLyrics.lines.length;
+  const activeIdx = Math.min(n - 1, Math.max(0, Math.round(ratio * (n - 1))));
+
+  const viewport = document.getElementById('prompterViewport');
+  const firstEl = document.getElementById('lyricLine_0');
+  const lastEl = document.getElementById('lyricLine_' + (n - 1));
+  if (firstEl && lastEl) {
+    const startY = firstEl.offsetTop;
+    const endY = lastEl.offsetTop;
+    const focusOffset = viewport.clientHeight * 0.32;
+    const targetY = startY + ratio * Math.max(1, endY - startY) - focusOffset;
+    viewport.scrollTop = Math.max(0, targetY);
+  }
+
+  for (let i = 0; i < n; i++) {
+    const el = document.getElementById('lyricLine_' + i);
+    if (el) el.classList.toggle('active-line', i === activeIdx);
+  }
+}
+
+/* -------------------------------------------------------------------------
+   Sample-Accurate Web Audio Engine
+   ------------------------------------------------------------------------- */
+function ensureAudioContext() {
+  if (!audioCtx) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    audioCtx = new AudioContextClass();
+    backingGainNode = audioCtx.createGain();
+    clickGainNode = audioCtx.createGain();
+    backingGainNode.connect(audioCtx.destination);
+    clickGainNode.connect(audioCtx.destination);
+    applyGains();
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+}
+
+function applyGains() {
+  if (!backingGainNode || !clickGainNode) return;
+  let bGain = 0, cGain = 0;
+  if (!state.masterMuted) {
+    const anySolo = state.backingSolo || state.clickSolo;
+    const bActive = anySolo ? (state.backingSolo && !state.backingMuted) : !state.backingMuted;
+    const cActive = anySolo ? (state.clickSolo && !state.clickMuted) : !state.clickMuted;
+    if (bActive) bGain = state.backingVol * state.masterVol;
+    if (cActive) cGain = state.clickVol * state.masterVol;
+  }
+  backingGainNode.gain.setValueAtTime(bGain, audioCtx.currentTime);
+  clickGainNode.gain.setValueAtTime(cGain, audioCtx.currentTime);
+}
+
+async function selectAndLoadTrack(index, autoPlay) {
+  if (index < 0 || index >= playlist.length) return;
+  stopSourcesOnly();
+  isPlaying = false;
+  pauseOffsetSec = 0;
+  currentIndex = index;
+  const item = playlist[index];
+
+  // Restore song's saved click volume
+  state.clickVol = item.clickVolume !== undefined ? item.clickVolume : 0.60;
+  document.getElementById('sliderClick').value = Math.round(state.clickVol * 100);
+  document.getElementById('valClick').textContent = Math.round(state.clickVol * 100) + '%';
+
+  document.getElementById('songTitle').textContent = '⏳ Cargando ' + item.title + '...';
+  renderPlaylist();
+
+  try {
+    ensureAudioContext();
+    backingBuffer = null;
+    clickBuffer = null;
+    currentLyrics = null;
+
+    if (item.backingEntry) {
+      const ab = await item.backingEntry.getArrayBuffer();
+      backingBuffer = await audioCtx.decodeAudioData(ab);
+    }
+    if (item.clickEntry) {
+      const ab = await item.clickEntry.getArrayBuffer();
+      clickBuffer = await audioCtx.decodeAudioData(ab);
+    }
+    if (item.lyricsEntry) {
+      const txt = await item.lyricsEntry.getText();
+      currentLyrics = parseLivePrompterText(txt);
+    }
+
+    const durB = backingBuffer ? backingBuffer.duration : 0;
+    const durC = clickBuffer ? clickBuffer.duration : 0;
+    trackDurationSec = Math.max(durB, durC);
+
+    document.getElementById('songTitle').textContent = item.title;
+    document.getElementById('srBadge').textContent = (audioCtx.sampleRate / 1000).toFixed(1) + ' kHz';
+    document.getElementById('syncBadge').textContent = (backingBuffer && clickBuffer) ? '🔒 SYNC PERFECTO' : '⚠️ SIN CLICK';
+
+    const metaParts = [];
+    if (item.folder) metaParts.push('📁 ' + item.folder);
+    metaParts.push((backingBuffer && clickBuffer) ? '🎯 Backing + Click' : '⚠️ Solo Backing');
+    if (currentLyrics) metaParts.push('📝 Letra L.txt OK');
+    document.getElementById('songMeta').textContent = metaParts.join(' · ');
+
+    renderLyricsDOM(currentLyrics, trackDurationSec);
+    updateLyricsScroll(0);
+    document.getElementById('timeClock').textContent = `00:00 / ${fmtTime(trackDurationSec)}`;
+    document.getElementById('seekSlider').value = 0;
+
+    if (autoPlay) startPlaybackFrom(0);
+    updatePlayBtnUI();
+    renderPlaylist();
+  } catch (err) {
+    alert('Error al decodificar audio: ' + err.message);
+  }
+}
+
+function stopSourcesOnly() {
+  for (const src of [backingSource, clickSource]) {
+    if (src) {
+      try { src.onended = null; src.stop(); src.disconnect(); } catch (e) {}
+    }
+  }
+  backingSource = null;
+  clickSource = null;
+}
+
+function startPlaybackFrom(offsetSec) {
+  if (!backingBuffer && !clickBuffer) return;
+  ensureAudioContext();
+  stopSourcesOnly();
+
+  offsetSec = Math.max(0, Math.min(trackDurationSec - 0.01, offsetSec));
+  pauseOffsetSec = offsetSec;
+  applyGains();
+
+  // Schedule both buffers on the exact same hardware AudioContext sample clock
+  const startAt = audioCtx.currentTime + 0.025;
+  startCtxTime = startAt - offsetSec;
+
+  if (backingBuffer) {
+    backingSource = audioCtx.createBufferSource();
+    backingSource.buffer = backingBuffer;
+    backingSource.connect(backingGainNode);
+    backingSource.start(startAt, offsetSec);
+  }
+  if (clickBuffer) {
+    clickSource = audioCtx.createBufferSource();
+    clickSource.buffer = clickBuffer;
+    clickSource.connect(clickGainNode);
+    clickSource.start(startAt, offsetSec);
+  }
+
+  const primarySource = backingSource || clickSource;
+  if (primarySource) {
+    primarySource.onended = () => {
+      if (isPlaying) {
+        onTrackNaturallyEnded();
+      }
+    };
+  }
+
+  isPlaying = true;
+  updatePlayBtnUI();
+  renderPlaylist();
+}
+
+function togglePlayPause() {
+  if (!backingBuffer && !clickBuffer) {
+    if (playlist.length > 0) selectAndLoadTrack(Math.max(0, currentIndex), true);
+    return;
+  }
+  if (isPlaying) {
+    pauseOffsetSec = getCurrentPlaybackSec();
+    isPlaying = false;
+    stopSourcesOnly();
+    updatePlayBtnUI();
+    renderPlaylist();
+  } else {
+    if (pauseOffsetSec >= trackDurationSec - 0.05) pauseOffsetSec = 0;
+    startPlaybackFrom(pauseOffsetSec);
+  }
+}
+
+function stopPlayback() {
+  isPlaying = false;
+  pauseOffsetSec = 0;
+  stopSourcesOnly();
+  document.getElementById('seekSlider').value = 0;
+  document.getElementById('timeClock').textContent = `00:00 / ${fmtTime(trackDurationSec)}`;
+  updateLyricsScroll(0);
+  updatePlayBtnUI();
+  renderPlaylist();
+}
+
+function getCurrentPlaybackSec() {
+  if (!isPlaying || !audioCtx) return pauseOffsetSec;
+  return Math.max(0, Math.min(trackDurationSec, audioCtx.currentTime - startCtxTime));
+}
+
+function onTrackNaturallyEnded() {
+  isPlaying = false;
+  pauseOffsetSec = 0;
+  updatePlayBtnUI();
+  if (currentIndex + 1 < playlist.length) {
+    selectAndLoadTrack(currentIndex + 1, continuousMode);
+  } else {
+    stopPlayback();
+  }
+}
+
+function prevTrack() {
+  if (getCurrentPlaybackSec() > 3.0) {
+    if (isPlaying) startPlaybackFrom(0);
+    else { pauseOffsetSec = 0; updateLyricsScroll(0); }
+    return;
+  }
+  if (currentIndex > 0) selectAndLoadTrack(currentIndex - 1, isPlaying);
+}
+
+function nextTrack() {
+  if (currentIndex + 1 < playlist.length) selectAndLoadTrack(currentIndex + 1, isPlaying);
+}
+
+function toggleMode() {
+  continuousMode = !continuousMode;
+  const btn = document.getElementById('btnMode');
+  if (continuousMode) {
+    btn.className = 'btn-mode continuous';
+    btn.textContent = '🔄 Modo: Continuo (Winamp)';
+  } else {
+    btn.className = 'btn-mode live';
+    btn.textContent = '🛑 Modo: Detener al finalizar (Vivo)';
+  }
+}
+
+function updatePlayBtnUI() {
+  const btn = document.getElementById('btnPlay');
+  if (isPlaying) {
+    btn.className = 'btn-play playing';
+    btn.textContent = '⏸ Pausa';
+  } else {
+    btn.className = 'btn-play';
+    btn.textContent = '▶ Play';
+  }
+}
+
+/* -------------------------------------------------------------------------
+   Mixer & Stage Controls
+   ------------------------------------------------------------------------- */
+function onSlider(ch, val) {
+  const ratio = Number(val) / 100;
+  if (ch === 'master') {
+    state.masterVol = ratio;
+    document.getElementById('valMaster').textContent = val + '%';
+  } else if (ch === 'backing') {
+    state.backingVol = ratio;
+    document.getElementById('valBacking').textContent = val + '%';
+  } else if (ch === 'click') {
+    state.clickVol = ratio;
+    document.getElementById('valClick').textContent = val + '%';
+    if (currentIndex >= 0 && playlist[currentIndex]) {
+      playlist[currentIndex].clickVolume = ratio;
+      volumeMemory[playlist[currentIndex].idKey] = ratio;
+      saveVolumeMemory();
+      renderPlaylist();
+    }
+  }
+  applyGains();
+}
+
+function setStripVol(ch, pct) {
+  const sliderId = ch === 'master' ? 'sliderMaster' : (ch === 'backing' ? 'sliderBacking' : 'sliderClick');
+  document.getElementById(sliderId).value = pct;
+  onSlider(ch, pct);
+}
+
+function toggleMute(ch) {
+  if (ch === 'master') {
+    state.masterMuted = !state.masterMuted;
+    document.getElementById('muteMaster').classList.toggle('muted', state.masterMuted);
+  } else if (ch === 'backing') {
+    state.backingMuted = !state.backingMuted;
+    document.getElementById('muteBacking').classList.toggle('muted', state.backingMuted);
+  } else if (ch === 'click') {
+    state.clickMuted = !state.clickMuted;
+    document.getElementById('muteClick').classList.toggle('muted', state.clickMuted);
+  }
+  applyGains();
+}
+
+function toggleSolo(ch) {
+  if (ch === 'backing') {
+    state.backingSolo = !state.backingSolo;
+    document.getElementById('soloBacking').classList.toggle('solo', state.backingSolo);
+  } else if (ch === 'click') {
+    state.clickSolo = !state.clickSolo;
+    document.getElementById('soloClick').classList.toggle('solo', state.clickSolo);
+  }
+  applyGains();
+}
+
+function changeFontSize(delta) {
+  lyricFontSize = Math.max(14, Math.min(48, lyricFontSize + delta));
+  document.documentElement.style.setProperty('--lyric-size', lyricFontSize + 'px');
+  updateLyricsScroll(getCurrentPlaybackSec());
+}
+
+window.toggleStageMode = function(forceVal) {
+  const active = forceVal !== undefined ? forceVal : !document.body.classList.contains('stage-mode');
+  document.body.classList.toggle('stage-mode', active);
+  document.getElementById('btnStage').textContent = active ? '✖ Salir Escenario' : '⛶ Modo Escenario';
+  setTimeout(() => updateLyricsScroll(getCurrentPlaybackSec()), 50);
+};
+
+/* -------------------------------------------------------------------------
+   Playlist Rendering & Management
+   ------------------------------------------------------------------------- */
+function renderPlaylist() {
+  const tbody = document.getElementById('playlistBody');
+  const query = (document.getElementById('searchInput').value || '').trim().toLowerCase();
+  const withClick = playlist.filter(t => t.clickEntry).length;
+  const withLyrics = playlist.filter(t => t.lyricsEntry).length;
+  document.getElementById('playlistCount').textContent = `(${playlist.length} · 🎯${withClick} · 📝${withLyrics})`;
+
+  tbody.innerHTML = '';
+  playlist.forEach((item, idx) => {
+    if (query && !item.title.toLowerCase().includes(query) && !(item.folder || '').toLowerCase().includes(query)) {
+      return;
+    }
+    const tr = document.createElement('tr');
+    if (idx === currentIndex) tr.className = 'active';
+    tr.onclick = () => selectAndLoadTrack(idx, true);
+
+    const prefix = idx === currentIndex ? (isPlaying ? '▶ ' : '⏸ ') : '';
+    const clickBadge = item.clickEntry ? '<span style="color:var(--green)">🎯 OK</span>' : '<span style="color:var(--amber)">⚠️ No</span>';
+    const lyrBadge = item.lyricsEntry ? '<span style="color:var(--orange)">📝 OK</span>' : '<span style="color:#6e7681">—</span>';
+    const volPct = Math.round((item.clickVolume !== undefined ? item.clickVolume : 0.60) * 100) + '%';
+
+    tr.innerHTML = `
+      <td style="text-align:center;">${prefix}${idx + 1}</td>
+      <td>${item.title}<div style="font-size:10px;color:var(--muted);">${item.folder || ''}</div></td>
+      <td style="text-align:center;">${clickBadge}</td>
+      <td style="text-align:center;">${lyrBadge}</td>
+      <td style="text-align:center;">${volPct}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function moveSelected(dir) {
+  if (currentIndex < 0) return;
+  const target = currentIndex + dir;
+  if (target < 0 || target >= playlist.length) return;
+  const tmp = playlist[currentIndex];
+  playlist[currentIndex] = playlist[target];
+  playlist[target] = tmp;
+  currentIndex = target;
+  renderPlaylist();
+}
+
+function removeSelected() {
+  if (currentIndex < 0) return;
+  playlist.splice(currentIndex, 1);
+  if (!playlist.length) {
+    currentIndex = -1;
+    stopPlayback();
+  } else {
+    currentIndex = Math.min(currentIndex, playlist.length - 1);
+    selectAndLoadTrack(currentIndex, false);
+  }
+  renderPlaylist();
+}
+
+function clearPlaylist() {
+  stopPlayback();
+  playlist = [];
+  currentIndex = -1;
+  currentLyrics = null;
+  renderLyricsDOM(null, 0);
+  renderPlaylist();
+}
+
+/* -------------------------------------------------------------------------
+   Seek Slider & 30 FPS Telemetry Loop
+   ------------------------------------------------------------------------- */
+const seekSlider = document.getElementById('seekSlider');
+seekSlider.addEventListener('pointerdown', () => { userSeeking = true; });
+seekSlider.addEventListener('input', () => {
+  const previewSec = (Number(seekSlider.value) / 10000) * trackDurationSec;
+  document.getElementById('timeClock').textContent = `${fmtTime(previewSec)} / ${fmtTime(trackDurationSec)}`;
+  updateLyricsScroll(previewSec);
+});
+seekSlider.addEventListener('change', () => {
+  const targetSec = (Number(seekSlider.value) / 10000) * trackDurationSec;
+  pauseOffsetSec = targetSec;
+  if (isPlaying) startPlaybackFrom(targetSec);
+  else updateLyricsScroll(targetSec);
+  userSeeking = false;
+});
+
+setInterval(() => {
+  if (userSeeking) return;
+  const cur = getCurrentPlaybackSec();
+  if (trackDurationSec > 0) {
+    document.getElementById('timeClock').textContent = `${fmtTime(cur)} / ${fmtTime(trackDurationSec)}`;
+    seekSlider.value = Math.round((cur / trackDurationSec) * 10000);
+  }
+  if (isPlaying) {
+    updateLyricsScroll(cur);
+  }
+}, 33);
+</script>
+</body>
+</html>

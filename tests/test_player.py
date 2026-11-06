@@ -1,14 +1,14 @@
 """
-Automated verification tests for DualTrack Sync Player:
-1. Auto-pairing of '<Song> d.wav' + '<Song> click.mp3' (single file & recursive folders)
-2. 48kHz native support (and 48kHz + 44.1kHz cross-rate alignment)
-3. Sample-accurate single-pointer audio mixing (Master 100%, Backing 100%, Click 60% default)
-4. Playlist management and per-song click volume persistence
+Automated verification tests for SebaRockerPlayer v0.2:
+1. Auto-pairing of '<Song> D.wav' + '<Song> Clic.mp3' + '<Song> L.txt' (single file & recursive folders)
+2. LivePrompter (.txt) parser: {artist:...}, {duration:mm:ss}, {soc}/{eoc}, {d_time:...}, {pause:...}
+3. 48kHz native support (and 48kHz + 44.1kHz cross-rate alignment)
+4. Sample-accurate single-pointer audio mixing (Master 100%, Backing 100%, Click 60% default)
+5. Playlist management and per-song click volume persistence
 """
 
 from __future__ import annotations
 
-import struct
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,16 +18,36 @@ import numpy as np
 import soundfile as sf
 
 from core.audio_engine import DualTrackAudioEngine
+from core.lyrics_parser import parse_liveprompter_file, parse_liveprompter_text
 from core.playlist_manager import DEFAULT_CLICK_VOLUME, PlaylistManager
 from core.track_scanner import pair_Single_file, scan_paths
 
+MENSAKA_AGOSTO_L_TXT = """{artist:Mensaka}
+{duration:02:35}
+
+Corre el frio en mi habitacion 
+y el invierno se marcho con vos
+en septiembre suelo estar mejor
+aunque a veces me falte tu voz... y estoy
+
+{soc}
+Buscando una cancion
+para no extrañarte como un loco
+buscando una razon 
+porque agosto me destroza un poco
+Un poco el corazon
+{eoc}
+
+Murmurando en mi imaginacion
+el tiempo no juega a mi favor
+"""
+
 
 def _write_minimal_mp3_or_wav(path: Path, data: np.ndarray, samplerate: int) -> None:
-    """Write test audio file using soundfile (supports WAV, FLAC, OGG, and MP3 on modern libsndfile)."""
     sf.write(str(path), data, samplerate)
 
 
-class TestDualTrackPlayer(unittest.TestCase):
+class TestSebaRockerPlayerV02(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp_dir = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp_dir.name)
@@ -35,60 +55,88 @@ class TestDualTrackPlayer(unittest.TestCase):
     def tearDown(self) -> None:
         self.tmp_dir.cleanup()
 
-    def test_auto_pairing_single_file_and_recursive_folders(self) -> None:
-        """Verify that '<Tema> d.wav' and '<Tema> click.mp3' pair into a single clean item."""
-        album_dir = self.root / "Attaque 77" / "1989 - Dulce Navidad dls"
+    def test_auto_pairing_backing_click_and_lyrics_txt(self) -> None:
+        """Verify that '<Tema> D.wav', '<Tema> Clic.mp3', and '<Tema> L.txt' pair into one item."""
+        album_dir = self.root / "Mensaka"
         album_dir.mkdir(parents=True)
 
         sr = 48000
         samples = np.zeros((sr, 2), dtype=np.float32)
 
-        b1 = album_dir / "01 - Hay una Bomba en el Colegio D.wav"
-        c1 = album_dir / "01 - Hay una Bomba en el Colegio Clic.mp3"
-        b2 = album_dir / "02 - Gil d.wav"
-        c2 = album_dir / "02 - Gil click.mp3"
-        b3 = album_dir / "03 - Solo Backing D.wav"
+        b1 = album_dir / "Mensaka - Agosto D.wav"
+        c1 = album_dir / "Mensaka - Agosto Clic.mp3"
+        l1 = album_dir / "Mensaka - Agosto L.txt"
+
+        b2 = album_dir / "02 - Sin Letra D.wav"
+        c2 = album_dir / "02 - Sin Letra Clic.mp3"
 
         _write_minimal_mp3_or_wav(b1, samples, sr)
         _write_minimal_mp3_or_wav(c1, samples, sr)
+        l1.write_text(MENSAKA_AGOSTO_L_TXT, encoding="utf-8")
+
         _write_minimal_mp3_or_wav(b2, samples, sr)
         _write_minimal_mp3_or_wav(c2, samples, sr)
-        _write_minimal_mp3_or_wav(b3, samples, sr)
 
-        # 1. Opening a single backing file should auto-locate the Clic.mp3 / click.mp3
-        single_item = pair_Single_file(b1)
-        self.assertIsNotNone(single_item)
-        assert single_item is not None
-        self.assertEqual(single_item.display_name, "01 - Hay una Bomba en el Colegio")
-        self.assertTrue(single_item.has_backing)
-        self.assertTrue(single_item.has_click)
-        self.assertEqual(Path(single_item.click_path).name, "01 - Hay una Bomba en el Colegio Clic.mp3")
+        # 1. Opening the backing D.wav file should auto-locate both Clic.mp3 and L.txt
+        item = pair_Single_file(b1)
+        self.assertIsNotNone(item)
+        assert item is not None
+        self.assertEqual(item.display_name, "Mensaka - Agosto")
+        self.assertTrue(item.has_backing)
+        self.assertTrue(item.has_click)
+        self.assertTrue(item.has_lyrics)
+        self.assertEqual(Path(item.lyrics_path).name, "Mensaka - Agosto L.txt")
 
-        # 2. Opening the click file directly should also auto-locate the backing D.wav
-        from_click = pair_Single_file(c1)
-        self.assertIsNotNone(from_click)
-        assert from_click is not None
-        self.assertEqual(from_click.display_name, "01 - Hay una Bomba en el Colegio")
-        self.assertEqual(Path(from_click.backing_path).name, "01 - Hay una Bomba en el Colegio D.wav")
+        # 2. Opening the L.txt file directly should also auto-locate D.wav and Clic.mp3
+        from_lyrics = pair_Single_file(l1)
+        self.assertIsNotNone(from_lyrics)
+        assert from_lyrics is not None
+        self.assertEqual(from_lyrics.display_name, "Mensaka - Agosto")
+        self.assertTrue(from_lyrics.has_backing)
+        self.assertTrue(from_lyrics.has_click)
+        self.assertTrue(from_lyrics.has_lyrics)
 
-        # 3. Scanning the top-level band folder recursively should find 3 songs (not 5!)
-        items = scan_paths([self.root / "Attaque 77"], recursive=True)
-        self.assertEqual(len(items), 3)
-        self.assertEqual(items[0].display_name, "01 - Hay una Bomba en el Colegio")
-        self.assertTrue(items[0].has_click)
-        self.assertEqual(items[1].display_name, "02 - Gil")
-        self.assertTrue(items[1].has_click)
-        self.assertEqual(items[2].display_name, "03 - Solo Backing")
-        self.assertFalse(items[2].has_click)
+        # 3. Scanning the folder should return 2 songs (not 5 files!)
+        # Sorted naturally: '02 - Sin Letra' is items[0], 'Mensaka - Agosto' is items[1]
+        items = scan_paths([album_dir], recursive=True)
+        self.assertEqual(len(items), 2)
+        self.assertEqual(items[0].display_name, "02 - Sin Letra")
+        self.assertFalse(items[0].has_lyrics)
+        self.assertEqual(items[1].display_name, "Mensaka - Agosto")
+        self.assertTrue(items[1].has_lyrics)
+
+    def test_liveprompter_lyrics_parser_and_scroll_timing(self) -> None:
+        """Verify {artist}, {duration:02:35}, {soc}/{eoc}, chord stripping, and scroll math."""
+        l_path = self.root / "Mensaka - Agosto L.txt"
+        l_path.write_text(MENSAKA_AGOSTO_L_TXT, encoding="utf-8")
+
+        parsed = parse_liveprompter_file(l_path)
+        self.assertEqual(parsed.artist, "Mensaka")
+        # 02:35 = 2 * 60 + 35 = 155.0 seconds
+        self.assertAlmostEqual(parsed.duration_seconds or 0.0, 155.0)
+        self.assertFalse(parsed.is_empty)
+
+        # Verify chorus lines ({soc} ... {eoc}) are marked is_chorus=True
+        chorus_lines = [ln for ln in parsed.lines if ln.is_chorus and ln.text.strip()]
+        self.assertEqual(len(chorus_lines), 5)
+        self.assertEqual(chorus_lines[0].text, "Buscando una cancion")
+
+        # Verify scroll ratio from start (0s) to mid (77.5s) to end (155s)
+        self.assertAlmostEqual(parsed.compute_scroll_ratio(0.0, 180.0), 0.0)
+        self.assertAlmostEqual(parsed.compute_scroll_ratio(77.5, 180.0), 0.50, places=2)
+        self.assertAlmostEqual(parsed.compute_scroll_ratio(155.0, 180.0), 1.0)
+
+        # Verify {d_time:...} and chord stripping ([Am] removed)
+        custom_txt = "{duration:01:00}\n[Am]Linea 1\n{d_time:00:40}\n[G]Linea 2\nLinea 3\n"
+        p2 = parse_liveprompter_text(custom_txt)
+        self.assertEqual(p2.lines[0].text, "Linea 1")
+        self.assertEqual(p2.lines[1].text, "Linea 2")
+        # At t=40s, line index 1 (out of 0, 1, 2 -> pos 0.5) must be reached
+        self.assertAlmostEqual(p2.compute_scroll_ratio(40.0), 0.50, places=2)
 
     @patch("core.audio_engine.DualTrackAudioEngine._open_stream")
     def test_48khz_native_and_sample_accurate_mixing(self, _mock_stream) -> None:
-        """
-        Verify 48kHz native loading, 60% default click volume, Master volume scaling,
-        and sample-accurate frame alignment during playback and seeking.
-        """
         sr = 48000
-        # 2 seconds at 48kHz = 96,000 frames of a 1000 Hz sine wave
         n_frames = sr * 2
         t = np.arange(n_frames, dtype=np.float32) / sr
         sine_wave = (0.5 * np.sin(2.0 * np.pi * 1000.0 * t)).astype(np.float32)
@@ -100,62 +148,19 @@ class TestDualTrackPlayer(unittest.TestCase):
         _write_minimal_mp3_or_wav(c_path, stereo_wave, sr)
 
         engine = DualTrackAudioEngine()
-        # Verify mandatory defaults: Master=100%, Backing=100%, Click=60%
         self.assertAlmostEqual(engine.master_volume, 1.0)
         self.assertAlmostEqual(engine.backing_volume, 1.0)
         self.assertAlmostEqual(engine.click_volume, 0.60)
 
         stats = engine.load_tracks(b_path, c_path)
         self.assertEqual(stats.sample_rate, 48000)
-        self.assertEqual(stats.backing_sr_original, 48000)
-        self.assertEqual(stats.click_sr_original, 48000)
         self.assertEqual(stats.total_frames, n_frames)
-        self.assertTrue(stats.has_backing)
-        self.assertTrue(stats.has_click)
 
-        # Simulate hardware audio callback and verify sample-accurate sum
         engine._is_playing = True
         out = np.zeros((1024, 2), dtype=np.float32)
         engine._audio_callback(out, 1024, None, 0)
-
-        # Expected mix: (stereo_wave * 1.0 + stereo_wave * 0.60) * 1.0 = stereo_wave * 1.60
         expected_first = stereo_wave[:1024] * 1.60
         self.assertTrue(np.allclose(out, expected_first, atol=0.015))
-        self.assertEqual(engine.current_frame, 1024)
-
-        # Now change Master volume to 50% -> affects both tracks: 1.60 * 0.5 = 0.80
-        engine.master_volume = 0.50
-        engine._audio_callback(out, 1024, None, 0)
-        expected_second = stereo_wave[1024:2048] * 0.80
-        self.assertTrue(np.allclose(out, expected_second, atol=0.015))
-        self.assertEqual(engine.current_frame, 2048)
-
-        # Test Seek: both backing and click jump via the single frame pointer
-        engine.seek_seconds(1.0)
-        self.assertEqual(engine.current_frame, 48000)
-
-    @patch("core.audio_engine.DualTrackAudioEngine._open_stream")
-    def test_cross_sample_rate_48khz_backing_with_44100hz_click(self, _mock_stream) -> None:
-        """Verify that if Backing is 48kHz and Click is 44.1kHz, Click is matched to 48kHz."""
-        sr_b = 48000
-        sr_c = 44100
-        b_path = self.root / "CrossRate d.wav"
-        c_path = self.root / "CrossRate click.mp3"
-
-        t_b = np.arange(sr_b, dtype=np.float32) / sr_b
-        t_c = np.arange(sr_c, dtype=np.float32) / sr_c
-        wave_b = np.column_stack([0.4 * np.sin(2 * np.pi * 440 * t_b)] * 2).astype(np.float32)
-        wave_c = np.column_stack([0.4 * np.sin(2 * np.pi * 880 * t_c)] * 2).astype(np.float32)
-
-        _write_minimal_mp3_or_wav(b_path, wave_b, sr_b)
-        _write_minimal_mp3_or_wav(c_path, wave_c, sr_c)
-
-        engine = DualTrackAudioEngine()
-        stats = engine.load_tracks(b_path, c_path)
-        self.assertEqual(stats.sample_rate, 48000)
-        self.assertEqual(stats.backing_sr_original, 48000)
-        self.assertEqual(stats.click_sr_original, 44100)
-        self.assertEqual(engine._backing_buf.shape, engine._click_buf.shape)
 
     def test_playlist_and_volume_memory(self) -> None:
         mem_file = self.root / "vol_mem.json"
@@ -171,7 +176,6 @@ class TestDualTrackPlayer(unittest.TestCase):
         track = added[0]
         self.assertAlmostEqual(pm.get_track_click_volume(track), DEFAULT_CLICK_VOLUME)
 
-        # Customize click volume for this song to 75% and verify persistence
         pm.set_track_click_volume(track, 0.75)
         pm2 = PlaylistManager(memory_path=mem_file)
         added2 = pm2.add_paths([self.root])

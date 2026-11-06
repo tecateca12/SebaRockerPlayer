@@ -1,5 +1,5 @@
 """
-Main Window for the Dual-Track Synchronized Audio Player (Backing + Click).
+Main Window for SebaRockerPlayer (Backing + Click + LivePrompter Lyrics).
 """
 
 from __future__ import annotations
@@ -19,13 +19,16 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSlider,
+    QSplitter,
     QVBoxLayout,
     QWidget,
 )
 
 from core.audio_engine import DualTrackAudioEngine
-from core.playlist_manager import DEFAULT_CLICK_VOLUME, PlaylistManager
+from core.lyrics_parser import parse_liveprompter_file
+from core.playlist_manager import PlaylistManager
 from core.track_scanner import SUPPORTED_EXTENSIONS, TrackItem
+from ui.lyrics_widget import LyricsWidget
 from ui.mixer_widget import MixerWidget
 from ui.playlist_widget import PlaylistWidget
 
@@ -39,15 +42,15 @@ def format_time(seconds: float) -> str:
 
 
 class MainWindow(QMainWindow):
-    """Winamp-inspired Dual-Track Synchronized Player Main Window."""
+    """Winamp + LivePrompter Dual-Track Synchronized Player Main Window."""
 
     trackFinishedOnAudioThread = Signal()
 
     def __init__(self, initial_paths: List[str] | None = None) -> None:
         super().__init__()
-        self.setWindowTitle("SebaRockerPlayer — Backing + Click (Sample-Accurate)")
-        self.setMinimumSize(860, 660)
-        self.resize(940, 720)
+        self.setWindowTitle("SebaRockerPlayer v0.2 — Backing + Click + LivePrompter")
+        self.setMinimumSize(980, 680)
+        self.resize(1180, 760)
         self.setAcceptDrops(True)
 
         self.engine = DualTrackAudioEngine()
@@ -63,7 +66,7 @@ class MainWindow(QMainWindow):
         self._connect_signals()
         self._populate_audio_devices()
 
-        # 30 FPS UI timer for time display, seek bar, and live VU meters
+        # 30 FPS UI timer for time display, seek bar, live VU meters, and smooth lyrics scroll
         self._ui_timer = QTimer(self)
         self._ui_timer.setInterval(33)
         self._ui_timer.timeout.connect(self._update_telemetry)
@@ -83,15 +86,19 @@ class MainWindow(QMainWindow):
                 color: #e6edf3;
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             }
-            QFrame#DeckDisplay {
+            QFrame#DeckDisplay, QFrame#PlaylistContainer, QFrame#LyricsContainer {
                 background-color: #161b22;
                 border: 1px solid #30363d;
                 border-radius: 10px;
             }
-            QFrame#PlaylistContainer {
-                background-color: #161b22;
-                border: 1px solid #30363d;
-                border-radius: 10px;
+            QSplitter::handle {
+                background-color: #21262d;
+                width: 6px;
+                margin: 4px 2px;
+                border-radius: 3px;
+            }
+            QSplitter::handle:hover {
+                background-color: #58a6ff;
             }
             """
         )
@@ -101,17 +108,16 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
 
         root_layout = QVBoxLayout(central)
-        root_layout.setContentsMargins(14, 14, 14, 14)
+        root_layout.setContentsMargins(12, 12, 12, 12)
         root_layout.setSpacing(10)
 
         # 1. Top Winamp Deck Display + Transport
-        deck_frame = QFrame()
-        deck_frame.setObjectName("DeckDisplay")
-        deck_layout = QVBoxLayout(deck_frame)
-        deck_layout.setContentsMargins(14, 12, 14, 12)
-        deck_layout.setSpacing(10)
+        self.deck_frame = QFrame()
+        self.deck_frame.setObjectName("DeckDisplay")
+        deck_layout = QVBoxLayout(self.deck_frame)
+        deck_layout.setContentsMargins(14, 10, 14, 10)
+        deck_layout.setSpacing(8)
 
-        # Top row of deck: Track Title & Digital Clock
         info_row = QHBoxLayout()
         info_row.setSpacing(12)
 
@@ -124,7 +130,9 @@ class MainWindow(QMainWindow):
         )
         title_col.addWidget(self.song_title_lbl)
 
-        self.song_meta_lbl = QLabel("Soporta emparejamiento automático: '<Tema> d.wav' + '<Tema> click.mp3'")
+        self.song_meta_lbl = QLabel(
+            "Auto-empareja: '<Tema> D.wav' + '<Tema> Clic.mp3' + '<Tema> L.txt' (LivePrompter)"
+        )
         self.song_meta_lbl.setStyleSheet("font-size: 12px; color: #8b949e;")
         title_col.addWidget(self.song_meta_lbl)
 
@@ -216,9 +224,8 @@ class MainWindow(QMainWindow):
         transport_row.addWidget(self.btn_stop)
         transport_row.addWidget(self.btn_next)
 
-        transport_row.addSpacing(12)
+        transport_row.addSpacing(10)
 
-        # Toggle between Continuous (Winamp) and Stop-at-end (Live/Rehearsal)
         self.btn_mode = QPushButton("🔄 Modo: Continuo (Winamp)")
         self.btn_mode.setCheckable(True)
         self.btn_mode.setChecked(True)
@@ -232,13 +239,12 @@ class MainWindow(QMainWindow):
 
         transport_row.addStretch()
 
-        # Audio Output Device Selector
         dev_lbl = QLabel("Salida:")
         dev_lbl.setStyleSheet("font-size: 12px; color: #8b949e; font-weight: 600;")
         transport_row.addWidget(dev_lbl)
 
         self.device_combo = QComboBox()
-        self.device_combo.setMinimumWidth(210)
+        self.device_combo.setMinimumWidth(200)
         self.device_combo.setStyleSheet(
             """
             QComboBox {
@@ -254,19 +260,38 @@ class MainWindow(QMainWindow):
         transport_row.addWidget(self.device_combo)
 
         deck_layout.addLayout(transport_row)
-        root_layout.addWidget(deck_frame)
+        root_layout.addWidget(self.deck_frame)
 
         # 2. Mixer Panel (Master 100%, Backing 100%, Click 60%)
         self.mixer = MixerWidget()
         root_layout.addWidget(self.mixer)
 
-        # 3. Playlist Panel (Drag & Drop + Auto-pairing)
+        # 3. Split View: Left = Playlist, Right = LivePrompter Teleprompter
+        self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.playlist_widget = PlaylistWidget()
-        root_layout.addWidget(self.playlist_widget, 1)
+        self.lyrics_widget = LyricsWidget()
 
-        # Keyboard shortcut: Spacebar for Play/Pause
+        self.main_splitter.addWidget(self.playlist_widget)
+        self.main_splitter.addWidget(self.lyrics_widget)
+        self.main_splitter.setStretchFactor(0, 4)
+        self.main_splitter.setStretchFactor(1, 6)
+        self.main_splitter.setSizes([470, 680])
+
+        root_layout.addWidget(self.main_splitter, 1)
+
+        # Keyboard shortcuts: Space for Play/Pause, F11 / Esc for Stage Mode
         self.space_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Space), self)
         self.space_shortcut.activated.connect(self.on_play_pause_clicked)
+
+        self.f11_shortcut = QShortcut(QKeySequence(Qt.Key.Key_F11), self)
+        self.f11_shortcut.activated.connect(
+            lambda: self.lyrics_widget.btn_stage.setChecked(not self.lyrics_widget.btn_stage.isChecked())
+        )
+
+        self.esc_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
+        self.esc_shortcut.activated.connect(
+            lambda: self.lyrics_widget.btn_stage.setChecked(False)
+        )
 
     @staticmethod
     def _make_transport_btn(
@@ -368,6 +393,14 @@ class MainWindow(QMainWindow):
         self.playlist_widget.savePlaylistRequested.connect(self.save_playlist_dialog)
         self.playlist_widget.loadPlaylistRequested.connect(self.load_playlist_dialog)
 
+        # Lyrics Stage Mode signal
+        self.lyrics_widget.stageModeToggled.connect(self._on_stage_mode_toggled)
+
+    def _on_stage_mode_toggled(self, stage_active: bool) -> None:
+        """Toggle Stage Fullscreen Mode: hide playlist and mixer so lyrics fill the screen."""
+        self.playlist_widget.setVisible(not stage_active)
+        self.mixer.setVisible(not stage_active)
+
     def _populate_audio_devices(self) -> None:
         self.device_combo.blockSignals(True)
         self.device_combo.clear()
@@ -399,7 +432,6 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     def add_paths_to_playlist(self, paths: List[str], auto_load_first: bool = True) -> None:
         was_empty = len(self.playlist.items) == 0
-        # Check if user dropped a .dpls playlist file directly
         playlist_files = [p for p in paths if Path(p).is_file() and Path(p).suffix.lower() == ".dpls"]
         media_paths = [p for p in paths if p not in playlist_files]
 
@@ -420,7 +452,6 @@ class MainWindow(QMainWindow):
 
     def _load_track_item(self, item: TrackItem, auto_play: bool = False) -> bool:
         try:
-            # Apply per-song saved click volume (or 60% default)
             click_vol = self.playlist.get_track_click_volume(item)
             self.engine.click_volume = click_vol
             self.mixer.click_strip.set_volume_silent(click_vol)
@@ -428,6 +459,16 @@ class MainWindow(QMainWindow):
             stats = self.engine.load_tracks(item.backing_path, item.click_path)
             item.duration_seconds = stats.duration_seconds
             item.sample_rate = stats.sample_rate
+
+            # Load and parse paired LivePrompter .txt lyrics if available
+            if item.has_lyrics and item.lyrics_path:
+                try:
+                    parsed_lyrics = parse_liveprompter_file(item.lyrics_path)
+                    self.lyrics_widget.load_parsed_lyrics(parsed_lyrics, stats.duration_seconds)
+                except Exception:
+                    self.lyrics_widget.load_parsed_lyrics(None)
+            else:
+                self.lyrics_widget.load_parsed_lyrics(None)
 
             # Update Deck header
             self.song_title_lbl.setText(item.display_name)
@@ -438,21 +479,16 @@ class MainWindow(QMainWindow):
             if item.folder_name:
                 meta_parts.append(f"📁 {item.folder_name}")
             if stats.has_backing and stats.has_click:
-                meta_parts.append("🎯 Backing + Click sincronizados")
-                if (
-                    stats.backing_sr_original
-                    and stats.click_sr_original
-                    and stats.backing_sr_original != stats.click_sr_original
-                ):
-                    meta_parts.append(
-                        f"(Click adaptado de {stats.click_sr_original}Hz a {stats.sample_rate}Hz)"
-                    )
+                meta_parts.append("🎯 Backing + Click")
                 self.sync_badge.setText("🔒 SYNC PERFECTO")
             elif stats.has_backing:
-                meta_parts.append("⚠️ Solo Backing (No se encontró archivo click)")
+                meta_parts.append("⚠️ Solo Backing")
                 self.sync_badge.setText("⚠️ SIN CLICK")
             else:
                 meta_parts.append("🥁 Solo Click")
+
+            if item.has_lyrics:
+                meta_parts.append("📝 Letra L.txt OK")
 
             self.song_meta_lbl.setText("  ·  ".join(meta_parts))
             self.seek_slider.setValue(0)
@@ -493,11 +529,11 @@ class MainWindow(QMainWindow):
     def on_stop_clicked(self) -> None:
         self.engine.stop()
         self.seek_slider.setValue(0)
+        self.lyrics_widget.update_scroll(0.0, self.engine.duration_seconds, True)
         self._update_play_button_state()
         self._refresh_playlist_ui()
 
     def on_prev_clicked(self) -> None:
-        # If more than 3 seconds into the song, restart current song; otherwise go to previous
         if self.engine.current_seconds > 3.0:
             self.engine.seek_seconds(0.0)
             return
@@ -517,12 +553,9 @@ class MainWindow(QMainWindow):
         self._update_mode_btn_style(checked)
 
     def _handle_track_finished(self) -> None:
-        """Called on main UI thread when active song finishes playing."""
         self._update_play_button_state()
         next_item = self.playlist.next_track()
         if next_item is not None:
-            # If continuous mode (Winamp) is active, auto-play next song;
-            # If live/rehearsal stop mode is active, cue next song ready to play.
             self._load_track_item(next_item, auto_play=self.playlist.continuous_playback)
         else:
             self.engine.stop()
@@ -562,7 +595,7 @@ class MainWindow(QMainWindow):
             )
 
     # ------------------------------------------------------------------
-    # Seek Bar & Telemetry Loop
+    # Seek Bar & Telemetry Loop (Audio + Teleprompter Scroll)
     # ------------------------------------------------------------------
     def _on_seek_pressed(self) -> None:
         self._user_seeking = True
@@ -572,6 +605,7 @@ class MainWindow(QMainWindow):
         if dur > 0:
             preview_sec = (value / 10000.0) * dur
             self.time_lbl.setText(f"{format_time(preview_sec)} / {format_time(dur)}")
+            self.lyrics_widget.update_scroll(preview_sec, dur, True)
 
     def _on_seek_released(self) -> None:
         ratio = self.seek_slider.value() / 10000.0
@@ -589,6 +623,7 @@ class MainWindow(QMainWindow):
                 self.seek_slider.blockSignals(True)
                 self.seek_slider.setValue(pos_val)
                 self.seek_slider.blockSignals(False)
+            self.lyrics_widget.update_scroll(cur, dur, self.engine.is_playing)
 
         self.mixer.update_peaks(
             self.engine.master_peak,
@@ -607,7 +642,6 @@ class MainWindow(QMainWindow):
 
     def _on_click_volume_changed(self, val: float) -> None:
         self.engine.click_volume = val
-        # Save custom click volume for the active song
         if self.playlist.current_item is not None:
             self.playlist.set_track_click_volume(self.playlist.current_item, val)
             self._refresh_playlist_ui(preserve_selection=True)
@@ -647,9 +681,9 @@ class MainWindow(QMainWindow):
         exts = " ".join(f"*{ext}" for ext in sorted(SUPPORTED_EXTENSIONS))
         files, _ = QFileDialog.getOpenFileNames(
             self,
-            "Seleccionar tema(s) (el click se emparejará automáticamente)",
+            "Seleccionar tema(s) (click y letra L.txt se emparejan automáticamente)",
             str(Path.home()),
-            f"Archivos de Audio ({exts});;Todos los archivos (*)",
+            f"Archivos de Tema ({exts});;Todos los archivos (*)",
         )
         if files:
             self.add_paths_to_playlist(files, auto_load_first=True)
@@ -657,7 +691,7 @@ class MainWindow(QMainWindow):
     def open_folder_dialog(self) -> None:
         folder = QFileDialog.getExistingDirectory(
             self,
-            "Seleccionar carpeta de temas o banda (escaneo automático con subcarpetas)",
+            "Seleccionar carpeta de temas o banda (escaneo con subcarpetas)",
             str(Path.home()),
         )
         if folder:
@@ -684,6 +718,7 @@ class MainWindow(QMainWindow):
                 self.song_title_lbl.setText("Playlist vacía")
                 self.song_meta_lbl.setText("Arrastrá un tema o carpeta para empezar")
                 self.time_lbl.setText("00:00 / 00:00")
+                self.lyrics_widget.load_parsed_lyrics(None)
         self._refresh_playlist_ui()
 
     def clear_playlist(self) -> None:
@@ -691,10 +726,11 @@ class MainWindow(QMainWindow):
         self.playlist.clear()
         self.song_title_lbl.setText("Arrastrá un tema o carpeta para empezar")
         self.song_meta_lbl.setText(
-            "Soporta emparejamiento automático: '<Tema> d.wav' + '<Tema> click.mp3'"
+            "Auto-empareja: '<Tema> D.wav' + '<Tema> Clic.mp3' + '<Tema> L.txt' (LivePrompter)"
         )
         self.time_lbl.setText("00:00 / 00:00")
         self.seek_slider.setValue(0)
+        self.lyrics_widget.load_parsed_lyrics(None)
         self._update_play_button_state()
         self._refresh_playlist_ui()
 
@@ -706,7 +742,7 @@ class MainWindow(QMainWindow):
             self,
             "Guardar Playlist",
             str(Path.home() / "mi_playlist.dpls"),
-            "DualTrack Playlist (*.dpls *.json)",
+            "SebaRockerPlayer Playlist (*.dpls *.json)",
         )
         if file_path:
             if not (file_path.endswith(".dpls") or file_path.endswith(".json")):
@@ -721,7 +757,7 @@ class MainWindow(QMainWindow):
             self,
             "Cargar Playlist",
             str(Path.home()),
-            "DualTrack Playlist (*.dpls *.json)",
+            "SebaRockerPlayer Playlist (*.dpls *.json)",
         )
         if file_path:
             try:

@@ -1,79 +1,57 @@
-# Manual de Uso Básico — SebaRockerPlayer 🎸🥁
+# Manual de Uso Básico — SebaRockerPlayer v0.2 🎸🥁📝
 
-**SebaRockerPlayer** reproduce tus **Backing Tracks** y su **Click** al mismo tiempo con sincronía exacta para que nunca se desfasen.
+**SebaRockerPlayer** reproduce tus **Backing Tracks**, su **Click** y scrollea la **Letra (`.txt`)** al mismo tiempo con sincronía exacta en **Android (Tablet / Celular)**, **Mac** y **Windows**.
 
 ---
 
 ## 1. ¿Cómo deben llamarse los archivos?
 
-Para que el reproductor cargue el click automáticamente cuando abrís un tema, los dos archivos deben estar en la misma carpeta y respetar este formato de nombre:
+Para que el reproductor cargue el click y la letra automáticamente cuando abrís un tema o una carpeta, los archivos deben estar en la misma carpeta y respetar este formato:
 
 - **Pista de Backing:** `<Nombre del Tema> D.wav` *(o `d.wav`, `.mp3`, `.flac`)*
 - **Pista de Click:** `<Nombre del Tema> Clic.mp3` *(o `click.mp3`, `.wav`)*
+- **Archivo de Letra (LivePrompter):** `<Nombre del Tema> L.txt` *(o `l.txt`)*
 
-**Ejemplo:**
-- `01 - Hay una Bomba en el Colegio D.wav`
-- `01 - Hay una Bomba en el Colegio Clic.mp3`
+**Ejemplo real:**
+- `Mensaka - Agosto D.wav`
+- `Mensaka - Agosto Clic.mp3`
+- `Mensaka - Agosto L.txt`
 
-En la lista de reproducción vas a ver un solo renglón limpio llamado **`01 - Hay una Bomba en el Colegio`** con el cartel verde **`🎯 Click OK`**.
-*(Si algún tema no tiene archivo de click, te avisará con **`⚠️ Sin Click`** y te dejará reproducirlo igual).*
-
----
-
-## 2. Cómo cargar canciones o carpetas
-
-Tenés 3 formas súper fáciles de cargar música:
-
-1. **Arrastrar y Soltar (Drag & Drop):**
-   - Arrastrá un tema suelto, la carpeta de un disco, o **la carpeta entera de una banda** directamente adentro de la ventana del programa.
-   - Si arrastrás una carpeta con varias subcarpetas de discos, el programa busca adentro de todas automáticamente.
-2. **Botón `➕ Abrir Tema(s)`:**
-   - Elegí el archivo `D.wav` (o el `Clic.mp3`). El programa busca y carga a su compañero automáticamente.
-3. **Botón `📁 Abrir Carpeta`:**
-   - Elegí una carpeta y se cargarán todos los temas listos para tocar en la playlist.
+En la playlist vas a ver un solo renglón llamado **`Mensaka - Agosto`** con los indicadores **`🎯 OK`** (Click cargado) y **`📝 OK`** (Letra cargada).
 
 ---
 
-## 3. Controles de Reproducción
+## 2. Cómo funciona el Teleprompter de Letras (`L.txt`)
 
-- **`▶ Play / ⏸ Pausa`** *(o tecla **`Espacio`**)*: Inicia o pausa ambas pistas a la vez.
-- **`⏹ Stop`**: Detiene la canción y vuelve al segundo `00:00`.
-- **`⏮ Anterior` / `⏭ Siguiente`**: Pasa al tema anterior o siguiente de la lista (o hacé **doble clic** sobre cualquier tema de la lista).
-- **Barra de Tiempo (Seek):** Podés hacer clic o arrastrar la barra azul a cualquier parte del tema; el Backing y el Click saltan juntos al mismo punto exacto sin perder el sincro.
-- **Selector `Salida`**: Te permite elegir por qué placa de sonido o auriculares querés que salga el audio.
+El lector de letras es compatible con tus archivos `.txt` de **LivePrompter**:
 
----
-
-## 4. Control de Volúmenes (Mezclador)
-
-El programa tiene 3 controles de volumen independientes que podés mover en vivo mientras suena el tema:
-
-1. **🟢 MASTER (AMBAS PISTAS):**
-   - Está al **`100%`** por defecto. Subir o bajar este control sube o baja **tanto el Backing como el Click juntos**.
-2. **🔵 BACKING TRACK:**
-   - Está al **`100%`** por defecto. Controla solo el volumen de la música/pista.
-3. **🟠 CLICK TRACK:**
-   - Arranca siempre al **`60%` por defecto**. Controla solo el volumen del metrónomo/click.
-   - 💡 **Memoria inteligente:** Si a un tema le cambiás el volumen del click (por ejemplo a `75%`), el programa **recuerda ese volumen** para ese tema la próxima vez que lo abras.
-
-### Botones rápidos en cada canal:
-- **`M` (Mute):** Silencia ese canal instantáneamente (se pone en rojo).
-- **`S` (Solo):** Deja sonando **únicamente** ese canal para escucharlo aislado (se pone en amarillo).
-- **Botón `100%` / `60%`:** Devuelve el volumen de ese canal a su valor original de fábrica con un clic.
+- **Velocidad de Scroll automática (`{duration:mm:ss}`):**
+  - Si el archivo `.txt` tiene la etiqueta `{duration:02:35}`, la letra va a scrollear suavemente de principio a fin en exactamente `02:35` al darle **Play**.
+  - Si un `.txt` no tiene `{duration:...}`, usa automáticamente la duración total del archivo de audio.
+- **Estribillos resaltados (`{soc}` y `{eoc}`):**
+  - Todo el texto entre `{soc}` y `{eoc}` aparece destacado con una barra lateral naranja y letra en negrita.
+- **Timestamps intermedios (`{d_time:...}`) y Pausas (`{pause:...}`):**
+  - Si tu archivo usa marcas `{d_time:seconds}` o `{pause:seconds}`, el scroll ajusta su velocidad para pasar por esa línea en el segundo exacto.
+- **Botones para el escenario (Ideales para Tablet):**
+  - **`A-` / `A+`**: Achica o agranda el tamaño de la letra al instante.
+  - **`⛶ Modo Escenario`**: Oculta la playlist y el mezclador para que **la letra ocupe toda la pantalla** mientras tocás en vivo.
 
 ---
 
-## 5. Modos de Playlist (Winamp vs Vivo/Ensayo)
+## 3. Cómo cargar canciones en Tablet Android, Mac o Windows
 
-Arriba al centro tenés un botón para elegir cómo avanza la lista cuando termina una canción:
-
-- **`🔄 Modo: Continuo (Winamp)` (Azul):** Cuando termina un tema, arranca a sonar el siguiente automáticamente sin parar.
-- **`🛑 Modo: Detener al finalizar (Vivo)` (Naranja):** Cuando termina el tema, el reproductor **se detiene solo** y deja seleccionado el siguiente tema esperando a que toques `Play` (o `Espacio`).
+1. **Botón `📁 Carpeta`:**
+   - Seleccioná la carpeta de un disco o la carpeta entera de tu banda (busca también adentro de subcarpetas) y carga todos los temas con su click y su letra listos para tocar.
+2. **Botón `➕ Tema(s)`:**
+   - Elegí los archivos sueltos y el programa los empareja automáticamente.
+3. **Arrastrar y Soltar (en Mac y Windows):**
+   - Arrastrá cualquier archivo o carpeta directamente adentro de la ventana.
 
 ---
 
-## 6. Organizar y Guardar tus Playlists
+## 4. Mezclador y Modos de Reproducción
 
-- **Buscar rápido:** Escribí arriba a la derecha en **`🔍 Filtrar tema o disco...`** para encontrar cualquier canción al instante.
-- **Cambiar el orden:** Seleccioná un tema y usá **`⬆ Subir`**, **`⬇ Bajar`** o **`🗑 Quitar`** (también la tecla `Borrar / Supr`).
-- **`💾 Guardar Lista` y `📂 Cargar Lista`:** Podés guardar tu lista de temas armada (archivo `.dpls`) para abrirla lista para tocar en cualquier ensayo o show.
+- **🟢 MASTER (`100%`):** Sube o baja ambas pistas juntas.
+- **🔵 BACKING TRACK (`100%`):** Volumen solo de la pista + botones `M` (Mute) y `S` (Solo).
+- **🟠 CLICK TRACK (`60%` por defecto):** Volumen solo del click + botones `M` (Mute) y `S` (Solo). Si lo cambiás en un tema, queda guardado en memoria para ese tema.
+- **🔄 Modo Continuo (Winamp) vs 🛑 Modo Vivo:** Tocando el botón de modo elegís si al terminar un tema pasa solo al siguiente o si frena esperando a que le des Play.

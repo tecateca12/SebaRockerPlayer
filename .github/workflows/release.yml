@@ -1,4 +1,4 @@
-name: Build and Release SebaRockerPlayer (macOS & Windows)
+name: Build and Release SebaRockerPlayer (macOS, Windows & Android)
 
 on:
   push:
@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release tag (e.g. v0.1)'
+        description: 'Release tag (e.g. v0.2)'
         required: true
-        default: 'v0.1'
+        default: 'v0.2'
 
 permissions:
   contents: write
@@ -76,9 +76,44 @@ jobs:
           name: windows-artifact
           path: dist/SebaRockerPlayer-Windows.exe
 
+  build-android:
+    name: Build Android Tablet/Mobile (.apk)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Build Signed Release APK
+        working-directory: android
+        run: gradle assembleRelease --no-daemon
+
+      - name: Rename APK for Release
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk SebaRockerPlayer-Android.apk
+
+      - name: Upload Android Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-artifact
+          path: SebaRockerPlayer-Android.apk
+
   publish-release:
     name: Publish GitHub Release
-    needs: [build-macos, build-windows]
+    needs: [build-macos, build-windows, build-android]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -96,20 +131,28 @@ jobs:
           name: windows-artifact
           path: release_assets
 
+      - name: Download Android Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-artifact
+          path: release_assets
+
       - name: Create GitHub Release & Upload Binaries
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: "SebaRockerPlayer ${{ github.ref_name }}"
           body: |
-            ## SebaRockerPlayer ${{ github.ref_name }} 🎸🥁
-            Reproductor dual sincronizado (**Backing Track + Click**) con precisión **Sample-Accurate** (cero desfasaje).
+            ## SebaRockerPlayer ${{ github.ref_name }} 🎸🥁📝
+            Reproductor dual sincronizado (**Backing Track + Click**) con **Teleprompter compatible con LivePrompter (`* L.txt`)** y precisión **Sample-Accurate** (cero desfasaje).
 
             ### Descargas Directas
-            - 🍎 **macOS:** `SebaRockerPlayer-macOS.zip` (Descomprimir y abrir `SebaRockerPlayer.app`. En el primer inicio hacer *Clic derecho -> Abrir* si macOS pide confirmación).
+            - 🤖 **Android (Tablet y Mobile):** `SebaRockerPlayer-Android.apk` (Instalador directo `.apk` para Tablets y celulares Android).
+            - 🍎 **macOS:** `SebaRockerPlayer-macOS.zip` (Descomprimir y abrir `SebaRockerPlayer.app`).
             - 🪟 **Windows:** `SebaRockerPlayer-Windows.exe` (Ejecutable portable directo, no requiere instalar Python).
 
             📖 Ver [Manual de Uso Básico](./MANUAL_DE_USO.md).
           files: |
+            release_assets/SebaRockerPlayer-Android.apk
             release_assets/SebaRockerPlayer-macOS.zip
             release_assets/SebaRockerPlayer-Windows.exe

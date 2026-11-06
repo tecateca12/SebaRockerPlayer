@@ -1,6 +1,6 @@
 """
 Winamp-style Playlist Widget with Drag & Drop support for files and folders,
-search filter, track reordering, and status indicators for paired Click tracks.
+search filter, track reordering, and status indicators for paired Click and Lyrics (.txt) tracks.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ class PlaylistTableWidget(QTableWidget):
     deleteRequested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(0, 5, parent)
+        super().__init__(0, 6, parent)
         self.setAcceptDrops(True)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -44,18 +44,20 @@ class PlaylistTableWidget(QTableWidget):
         self.setShowGrid(False)
         self.verticalHeader().setVisible(False)
 
-        headers = ["#", "Tema", "Carpeta / Disco", "Estado Click", "Vol. Click"]
+        headers = ["#", "Tema", "Carpeta", "Click", "Letra", "Vol. Click"]
         self.setHorizontalHeaderLabels(headers)
         header = self.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        self.setColumnWidth(0, 42)
+        self.setColumnWidth(0, 38)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
-        self.setColumnWidth(2, 180)
+        self.setColumnWidth(2, 120)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        self.setColumnWidth(3, 115)
+        self.setColumnWidth(3, 88)
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
-        self.setColumnWidth(4, 85)
+        self.setColumnWidth(4, 78)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
+        self.setColumnWidth(5, 72)
 
         self.setStyleSheet(
             """
@@ -143,20 +145,20 @@ class PlaylistWidget(QFrame):
         top_bar = QHBoxLayout()
         top_bar.setSpacing(8)
 
-        title_lbl = QLabel("PLAYLIST (BACKING + CLICK AUTO-EMPAREJADO)")
+        title_lbl = QLabel("PLAYLIST (BACKING + CLICK + LETRA)")
         title_lbl.setStyleSheet("font-weight: 700; font-size: 12px; color: #58a6ff; letter-spacing: 0.6px;")
         top_bar.addWidget(title_lbl)
 
         self.count_label = QLabel("0 temas")
-        self.count_label.setStyleSheet("font-size: 12px; color: #8b949e;")
+        self.count_label.setStyleSheet("font-size: 11px; color: #8b949e;")
         top_bar.addWidget(self.count_label)
 
         top_bar.addStretch()
 
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔍 Filtrar tema o disco...")
+        self.search_input.setPlaceholderText("🔍 Filtrar tema...")
         self.search_input.setClearButtonEnabled(True)
-        self.search_input.setFixedWidth(240)
+        self.search_input.setFixedWidth(180)
         self.search_input.setStyleSheet(
             """
             QLineEdit {
@@ -186,17 +188,17 @@ class PlaylistWidget(QFrame):
 
         # Bottom Action Toolbar
         btn_bar = QHBoxLayout()
-        btn_bar.setSpacing(6)
+        btn_bar.setSpacing(5)
 
-        self.btn_add_files = self._make_btn("➕ Abrir Tema(s)", "Seleccionar archivo(s) y cargar su click automáticamente")
-        self.btn_add_folder = self._make_btn("📁 Abrir Carpeta", "Cargar carpeta o subcarpetas completas con sus clicks")
-        self.btn_up = self._make_btn("⬆ Subir", "Mover tema hacia arriba")
-        self.btn_down = self._make_btn("⬇ Bajar", "Mover tema hacia abajo")
-        self.btn_remove = self._make_btn("🗑 Quitar", "Quitar tema seleccionado de la lista (Supr)")
-        self.btn_clear = self._make_btn("🧹 Limpiar", "Vaciar toda la playlist")
+        self.btn_add_files = self._make_btn("➕ Tema(s)", "Seleccionar archivo(s) y emparejar su click y letra automáticamente")
+        self.btn_add_folder = self._make_btn("📁 Carpeta", "Cargar carpeta o subcarpetas completas con sus clicks y letras")
+        self.btn_up = self._make_btn("⬆", "Mover tema hacia arriba")
+        self.btn_down = self._make_btn("⬇", "Mover tema hacia abajo")
+        self.btn_remove = self._make_btn("🗑", "Quitar tema seleccionado de la lista (Supr)")
+        self.btn_clear = self._make_btn("🧹", "Vaciar toda la playlist")
 
-        self.btn_save = self._make_btn("💾 Guardar Lista", "Guardar playlist y volúmenes personalizados (.dpls)")
-        self.btn_load = self._make_btn("📂 Cargar Lista", "Abrir una playlist guardada (.dpls)")
+        self.btn_save = self._make_btn("💾 Guardar", "Guardar playlist y volúmenes personalizados (.dpls)")
+        self.btn_load = self._make_btn("📂 Cargar", "Abrir una playlist guardada (.dpls)")
 
         self.btn_add_files.clicked.connect(self.addFilesRequested.emit)
         self.btn_add_folder.clicked.connect(self.addFolderRequested.emit)
@@ -209,7 +211,6 @@ class PlaylistWidget(QFrame):
 
         btn_bar.addWidget(self.btn_add_files)
         btn_bar.addWidget(self.btn_add_folder)
-        btn_bar.addSpacing(8)
         btn_bar.addWidget(self.btn_up)
         btn_bar.addWidget(self.btn_down)
         btn_bar.addWidget(self.btn_remove)
@@ -232,7 +233,7 @@ class PlaylistWidget(QFrame):
                 color: #c9d1d9;
                 border: 1px solid #30363d;
                 border-radius: 5px;
-                padding: 5px 10px;
+                padding: 5px 8px;
                 font-size: 12px;
                 font-weight: 600;
             }
@@ -287,7 +288,8 @@ class PlaylistWidget(QFrame):
 
         total = len(items)
         with_click = sum(1 for it in items if it.has_click)
-        self.count_label.setText(f"({total} temas · {with_click} con click)")
+        with_lyrics = sum(1 for it in items if it.has_lyrics)
+        self.count_label.setText(f"({total} · 🎯{with_click} · 📝{with_lyrics})")
 
         self.table.setRowCount(total)
         bold_font = QFont()
@@ -305,14 +307,9 @@ class PlaylistWidget(QFrame):
             # Column 1: Clean Song Title
             col_title = QTableWidgetItem(track.display_name)
             tooltip_lines = [f"Tema: {track.display_name}"]
-            if track.backing_path:
-                tooltip_lines.append(f"Backing: {Path(track.backing_path).name}")
-            else:
-                tooltip_lines.append("Backing: (No disponible)")
-            if track.click_path:
-                tooltip_lines.append(f"Click: {Path(track.click_path).name}")
-            else:
-                tooltip_lines.append("Click: (No encontrado)")
+            tooltip_lines.append(f"Backing: {Path(track.backing_path).name if track.backing_path else '(No disponible)'}")
+            tooltip_lines.append(f"Click: {Path(track.click_path).name if track.click_path else '(No encontrado)'}")
+            tooltip_lines.append(f"Letra: {Path(track.lyrics_path).name if track.lyrics_path else '(No encontrada)'}")
             col_title.setToolTip("\n".join(tooltip_lines))
 
             # Column 2: Folder / Album
@@ -321,17 +318,26 @@ class PlaylistWidget(QFrame):
 
             # Column 3: Click Status
             if track.has_click and track.has_backing:
-                col_status = QTableWidgetItem("🎯 Click OK")
+                col_status = QTableWidgetItem("🎯 OK")
                 col_status.setForeground(QColor("#3fb950"))
             elif track.has_click and not track.has_backing:
-                col_status = QTableWidgetItem("🥁 Solo Click")
+                col_status = QTableWidgetItem("🥁 Click")
                 col_status.setForeground(QColor("#d29922"))
             else:
-                col_status = QTableWidgetItem("⚠️ Sin Click")
+                col_status = QTableWidgetItem("⚠️ No")
                 col_status.setForeground(QColor("#d29922"))
             col_status.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
 
-            # Column 4: Click Volume %
+            # Column 4: Lyrics Status
+            if track.has_lyrics:
+                col_lyrics = QTableWidgetItem("📝 OK")
+                col_lyrics.setForeground(QColor("#f78166"))
+            else:
+                col_lyrics = QTableWidgetItem("—")
+                col_lyrics.setForeground(QColor("#6e7681"))
+            col_lyrics.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            # Column 5: Click Volume %
             vol_pct = int(round((track.click_volume if track.click_volume is not None else DEFAULT_CLICK_VOLUME) * 100))
             col_vol = QTableWidgetItem(f"{vol_pct}%")
             col_vol.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -340,7 +346,7 @@ class PlaylistWidget(QFrame):
             else:
                 col_vol.setForeground(QColor("#8b949e"))
 
-            for col_i, cell in enumerate((col_num, col_title, col_folder, col_status, col_vol)):
+            for col_i, cell in enumerate((col_num, col_title, col_folder, col_status, col_lyrics, col_vol)):
                 if is_current:
                     cell.setFont(bold_font)
                     if col_i in (0, 1):

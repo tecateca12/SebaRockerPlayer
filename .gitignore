@@ -15,6 +15,13 @@ dist/
 /build/SebaRockerPlayer/
 /build/DualTrack*/
 
+# Android Gradle build artifacts
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.apk
+
 # macOS / Windows OS files
 .DS_Store
 Thumbs.db
